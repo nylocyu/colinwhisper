@@ -1,0 +1,74 @@
+name: ColinWhisper
+options:
+  bundleIdPrefix: com.colinportisch
+  deploymentTarget:
+    macOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    ARCHS: arm64
+    # Stable signing identity so TCC permissions survive rebuilds.
+    DEVELOPMENT_TEAM: PW42RVY2HS
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: Apple Development
+    # Required for notarization. Mic access then needs the audio-input entitlement below.
+    ENABLE_HARDENED_RUNTIME: YES
+    # Single version source; release.sh bumps it.
+    MARKETING_VERSION: "1.0"
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
+targets:
+  ColinWhisper:
+    type: application
+    platform: macOS
+    sources: [ColinWhisper]
+    dependencies:
+      - package: Sparkle
+    entitlements:
+      path: ColinWhisper/ColinWhisper.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+    info:
+      path: ColinWhisper/Info.plist
+      properties:
+        CFBundleDisplayName: ColinWhisper
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(MARKETING_VERSION)
+        LSUIElement: true
+        # Sparkle: release.sh uploads appcast.xml to every GitHub release; "latest" always points to the newest.
+        SUFeedURL: https://github.com/nylocyu/colinwhisper/releases/latest/download/appcast.xml
+        SUPublicEDKey: Xfot+eBgzrhPMud188czBTHJM48Geu9lhl9i9BY+7qk=
+        SUEnableAutomaticChecks: true
+        NSMicrophoneUsageDescription: "ColinWhisper nimmt deine Stimme nur auf, solange du die Auslösetaste hältst. Das Audio bleibt im Arbeitsspeicher dieses Macs und wird nach der Transkription verworfen."
+        NSSpeechRecognitionUsageDescription: "ColinWhisper wandelt dein Diktat lokal auf diesem Mac in Text um."
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.colinportisch.ColinWhisper
+  ColinWhisperTests:
+    type: bundle.unit-test
+    platform: macOS
+    # Pure pipeline logic is compiled straight into the test bundle, so tests
+    # don't launch the menu bar app (event tap, permission prompts).
+    sources:
+      - Tests
+      - ColinWhisper/Pipeline.swift
+      - ColinWhisper/Glossary.swift
+      - ColinWhisper/Formatter.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ColinWhisper:
+    build:
+      targets:
+        ColinWhisper: all
+        ColinWhisperTests: [test]
+    run:
+      config: Debug
+    test:
+      targets: [ColinWhisperTests]
