@@ -251,3 +251,42 @@ private func tempURL() -> URL { FileManager.default.temporaryDirectory.appending
     // Happened in practice: the model answered with the body only.
     #expect(!Formatter.isPlausible("Danke für die Info.", for: "Hi Max, danke für die Info."))
 }
+
+// MARK: - Statistics
+
+@Test func streaksCountConsecutiveDays() {
+    let calendar = Calendar(identifier: .gregorian)
+    let today = calendar.date(from: DateComponents(year: 2026, month: 10, day: 7, hour: 9))!
+    func day(_ offset: Int, hour: Int = 12) -> Date {
+        calendar.date(byAdding: DateComponents(day: offset, hour: hour - 9), to: today)!
+    }
+    // Nothing today yet: the streak still runs from yesterday. Two dictations on one day count once.
+    let streaks = Usage.streaks(days: [day(-1), day(-2), day(-2, hour: 20), day(-4), day(-5), day(-6), day(-7)], today: today, calendar: calendar)
+    #expect(streaks.current == 2)
+    #expect(streaks.longest == 4)
+    #expect(Usage.streaks(days: [day(-2)], today: today, calendar: calendar).current == 0)
+    #expect(Usage.streaks(days: [], today: today, calendar: calendar).longest == 0)
+}
+
+@Test func usageStoreRecordsSeedsAndResets() {
+    let url = tempURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let result = DictationResult(
+        id: UUID(), timestamp: Date(), rawTranscript: "ähm die Rechnung von Peiperless",
+        correctedTranscript: "ähm die Rechnung von Paperless", formattedText: "Die Rechnung von Paperless.",
+        usedFallback: false, duration: 2)
+
+    let store = UsageStore(url: url, seed: [result])  // no file yet: starts from the history
+    store.record(result, appName: "Notizen", bundleID: "com.apple.Notes")
+    let reloaded = UsageStore(url: url, seed: [])
+    #expect(reloaded.records.count == 2)
+    #expect(reloaded.totalWords == 8)
+    #expect(reloaded.wordsPerMinute == 120)
+    #expect(reloaded.glossaryFixes == 2)    // Peiperless → Paperless
+    #expect(reloaded.formatterFixes == 2)   // "ähm" dropped; sentence-start case doesn't count
+    #expect(reloaded.nouns["Rechnung"] == 2)
+    #expect(reloaded.apps.map(\.name) == ["Notizen"])
+
+    reloaded.reset()
+    #expect(UsageStore(url: url, seed: [result]).records.isEmpty)  // a reset isn't undone by seeding
+}

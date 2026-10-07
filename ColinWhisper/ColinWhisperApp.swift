@@ -47,6 +47,7 @@ private struct MenuContent: View {
 
         Divider()
         Button("Korrekturfenster öffnen", action: controller.showCorrection)
+        Button("Statistik…", action: controller.showStats)
         Button("Glossar verwalten…", action: controller.showGlossary)
         Button("Einstellungen…", action: controller.showSettings)
             .keyboardShortcut(",")

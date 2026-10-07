@@ -115,7 +115,7 @@ enum Glossary {
     }
 
     /// Words with surrounding punctuation stripped; pure-punctuation tokens (list dashes) dropped.
-    private static func tokens(_ text: String) -> [String] {
+    static func tokens(_ text: String) -> [String] {
         text.split(whereSeparator: \.isWhitespace)
             .map { $0.trimmingCharacters(in: .punctuationCharacters.union(.symbols)) }
             .filter { !$0.isEmpty }
@@ -123,7 +123,7 @@ enum Glossary {
 
     /// Comparison key: ignores sentence-start capitalization the formatter adds,
     /// but keeps real case changes like "Eidas" → "eIDAS".
-    private static func key(_ token: String) -> String {
+    static func key(_ token: String) -> String {
         token.prefix(1).lowercased() + token.dropFirst()
     }
 

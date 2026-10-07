@@ -59,6 +59,7 @@ targets:
       - ColinWhisper/Pipeline.swift
       - ColinWhisper/Glossary.swift
       - ColinWhisper/Formatter.swift
+      - ColinWhisper/Stats.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

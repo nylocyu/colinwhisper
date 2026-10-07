@@ -59,9 +59,13 @@ Das Glossar füllt sich selbst: Korrigierst du im Korrekturfenster den eingefüg
 
 Dafür muss das Korrekturfenster nach dem Diktat auf – am bequemsten über die Einstellung „Korrekturfenster nach jedem Diktat öffnen". Gemerkte, noch nicht übernommene Kandidaten stehen in `pending-candidates.json`.
 
+## Statistik
+
+Menü → „Statistik…“ zeigt Wörter pro Minute, diktierte Wörter, Korrekturen (Formatierer und Glossar), die Nutzung nach App, die Tage in Folge mit Kalender, das häufigste Wort (nur Substantive) und die Hauptzeit. Beim ersten Öffnen startet sie mit den Diktaten aus dem Verlauf, danach zählt jedes Diktat dazu. Zurücksetzen: Einstellungen → „Statistik zurücksetzen“.
+
 ## Daten
 
-`~/Library/Application Support/ColinWhisper/`: `glossary.json` (von Hand bearbeitbar), `pending-candidates.json` (gemerkte Kandidaten) und `history.json` (die letzten N Diktate). Audio wird nie gespeichert.
+`~/Library/Application Support/ColinWhisper/`: `glossary.json` (von Hand bearbeitbar), `pending-candidates.json` (gemerkte Kandidaten), `history.json` (die letzten N Diktate) und `usage.json` (Statistik: pro Diktat Zeitpunkt, Wortzahl, Dauer, Ziel-App und Anzahl Korrekturen, dazu wie oft jedes Substantiv vorkam – kein Diktat-Text). Audio wird nie gespeichert.
 
 ## Abweichungen von der Spezifikation
 

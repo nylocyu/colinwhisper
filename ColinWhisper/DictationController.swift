@@ -67,6 +67,7 @@ final class DictationController {
 
     let transcriber = Transcriber()
     let glossary = GlossaryStore()
+    let usage = UsageStore(seed: DictationController.loadHistory())
     @ObservationIgnored let candidateMemory = CandidateMemory()
     @ObservationIgnored let windows = WindowManager()
 
@@ -210,6 +211,9 @@ final class DictationController {
         }
         addToHistory(result)
         state = .idle
+        // Target app is frontmost now; record after pasting so tagging never delays the insert.
+        let target = NSWorkspace.shared.frontmostApplication
+        defer { usage.record(result, appName: target?.localizedName, bundleID: target?.bundleIdentifier) }
 
         guard AXIsProcessTrusted() else {
             TextInserter.copy(result.formattedText)
@@ -257,6 +261,10 @@ final class DictationController {
 
     func showGlossary() {
         windows.show("glossary", title: "Glossar") { GlossaryView(store: glossary) }
+    }
+
+    func showStats() {
+        windows.show("stats", title: "Statistik") { StatsView(usage: usage) }
     }
 
     func showSettings() {
