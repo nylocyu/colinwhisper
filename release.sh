@@ -63,7 +63,7 @@ cat > "$OUT/appcast.xml" <<EOF
 </rss>
 EOF
 
-git commit -am "Release $VERSION"
+git diff --quiet || git commit -am "Release $VERSION"  # nothing to commit if the version was already set
 git tag "v$VERSION"
 git push origin HEAD "v$VERSION"
 gh release create "v$VERSION" "$OUT/$ZIP" "$OUT/appcast.xml" -R "$REPO" \
