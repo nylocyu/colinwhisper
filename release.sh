@@ -43,7 +43,8 @@ xcrun notarytool submit "$OUT/notarize.zip" --keychain-profile "$NOTARY_PROFILE"
 xcrun stapler staple "$OUT/ColinWhisper.app"
 spctl -a -vv "$OUT/ColinWhisper.app"
 
-ditto -c -k --keepParent "$OUT/ColinWhisper.app" "$OUT/$ZIP"
+# No xattrs/resource forks: they become ._ files that non-Apple unzippers drop into the bundle and break the signature.
+ditto -c -k --norsrc --noextattr --noacl --keepParent "$OUT/ColinWhisper.app" "$OUT/$ZIP"
 SIGNATURE=$("$SPARKLE_BIN/sign_update" "$OUT/$ZIP")  # sparkle:edSignature="…" length="…"
 cat > "$OUT/appcast.xml" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
