@@ -31,7 +31,7 @@ xcodebuild -project ColinWhisper.xcodeproj -scheme ColinWhisper -configuration R
 cp -R build/DerivedData/Build/Products/Release/ColinWhisper.app /Applications/
 ```
 
-Lokale Builds werden mit dem „Apple Development“-Zertifikat signiert (Team PW42RVY2HS), damit die Berechtigungen auch nach einem Neu-Build erhalten bleiben. Releases signiert `release.sh` mit der Developer ID. Wechselt man zwischen beiden, fragt macOS die Berechtigungen einmal neu ab.
+Lokale Builds werden wie Releases mit der Developer ID signiert (Team PW42RVY2HS). macOS bindet die Berechtigungen an die Signatur, so teilen sich Xcode-Builds und die installierte Version dieselben Freigaben.
 
 ## Erster Start
 

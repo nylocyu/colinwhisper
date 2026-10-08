@@ -10,10 +10,11 @@ settings:
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     MACOSX_DEPLOYMENT_TARGET: "26.0"
     ARCHS: arm64
-    # Stable signing identity so TCC permissions survive rebuilds.
+    # Same identity as releases: TCC grants are bound to the signature, so dev builds
+    # and the installed release share one set of permissions.
     DEVELOPMENT_TEAM: PW42RVY2HS
     CODE_SIGN_STYLE: Manual
-    CODE_SIGN_IDENTITY: Apple Development
+    CODE_SIGN_IDENTITY: Developer ID Application
     # Required for notarization. Mic access then needs the audio-input entitlement below.
     ENABLE_HARDENED_RUNTIME: YES
     # Single version source; release.sh bumps it.
