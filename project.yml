@@ -17,7 +17,7 @@ settings:
     # Required for notarization. Mic access then needs the audio-input entitlement below.
     ENABLE_HARDENED_RUNTIME: YES
     # Single version source; release.sh bumps it.
-    MARKETING_VERSION: "1.0"
+    MARKETING_VERSION: "1.1"
 packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
