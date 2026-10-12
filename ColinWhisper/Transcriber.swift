@@ -87,8 +87,14 @@ final class Transcriber: Transcribing {
                 context.contextualStrings[.general] = contextualStrings
                 try await analyzer.setContext(context)
             }
+            // Silence on both sides: the recording starts and ends right at the words, and
+            // without it the model drops edge words and leaves the last sentence unpunctuated
+            // (tested with TTS audio: "Wie würdest du das pricen" only got its "?" with padding).
+            let format = buffers.first?.format ?? audioFormat
             let (input, continuation) = AsyncStream.makeStream(of: AnalyzerInput.self)
+            continuation.yield(AnalyzerInput(buffer: Self.silence(seconds: 0.5, format: format)))
             for buffer in buffers { continuation.yield(AnalyzerInput(buffer: buffer)) }
+            continuation.yield(AnalyzerInput(buffer: Self.silence(seconds: 0.5, format: format)))
             continuation.finish()
 
             if let end = try await analyzer.analyzeSequence(input) {
@@ -101,5 +107,15 @@ final class Transcriber: Transcribing {
             throw error
         }
         return try await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func silence(seconds: Double, format: AVAudioFormat) -> AVAudioPCMBuffer {
+        let frames = AVAudioFrameCount(seconds * format.sampleRate)
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
+        buffer.frameLength = frames
+        for channel in UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList) {
+            memset(channel.mData, 0, Int(channel.mDataByteSize))
+        }
+        return buffer
     }
 }

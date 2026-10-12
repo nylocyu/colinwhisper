@@ -51,7 +51,7 @@ xcodebuild -project ColinWhisper.xcodeproj -scheme ColinWhisper -derivedDataPath
 
 ## Glossar
 
-Ein Eintrag ist entweder eine Korrektur („PayPal → Paperless“) oder nur ein Wort („QES-Addon“, *Erkannt als* leer). Die richtige Schreibweise jedes Eintrags wird durchgesetzt, auch wenn das Wort klein, mit Leerzeichen oder mit Bindestrichen ankommt: `qes add-on` → „QES-Addon“, `paper less` → „Paperless“.
+Ein Eintrag ist entweder eine Korrektur („PayPal → Paperless“) oder nur ein Wort („QES-Addon“, *Erkannt als* leer). Die richtige Schreibweise jedes Eintrags wird durchgesetzt, auch wenn das Wort klein, mit Leerzeichen oder mit Bindestrichen ankommt: `qes add-on` → „QES-Addon“, `paper less` → „Paperless“. Bei reinen Wort-Einträgen ab 7 Zeichen wird auch ein Buchstabe Abweichung korrigiert: `Papeless`, `Paperess` → „Paperless“.
 
 ## Glossar-Lernen
 
@@ -74,4 +74,6 @@ Menü → „Statistik…“ zeigt Wörter pro Minute, diktierte Wörter, Korrek
 - **Plausibilitätsprüfung** zusätzlich zur 50-%-Längenregel: Die Ausgabe darf nur wenige neue Wörter enthalten und kaum Inhaltswörter weglassen, und diktierte Fragen müssen Fragen bleiben. Sonst wird der unformatierte Text eingefügt.
 - **Glossar-Lernen ohne Bestätigung:** Die Spec verlangt eine Checkbox-Bestätigung pro Kandidat. Stattdessen zählt die App, in wie vielen verschiedenen Diktaten dieselbe Korrektur vorkam, und übernimmt sie ab dem zweiten Mal selbst.
 - **Abbruch bei Tastenkürzeln:** Wird mit gehaltener Auslösetaste eine andere Taste gedrückt oder geklickt (z. B. ⌘C), wird die Aufnahme still verworfen.
+- **Stille um die Aufnahme:** Vor und nach dem Audio hängt die App je 0,5 s Stille an. Ohne sie hat die Spracherkennung Wörter am Anfang und Ende verschluckt und den letzten Satz oft ohne Satzzeichen gelassen – auch Fragen ohne „?“.
+- **Fragenerkennung aus der Syntax:** Nach dem Glossar setzt die App ein „?“, wenn der Satzbau eine Frage ist (W-Frage mit Verb, Verb vorne mit passendem Subjekt wie „Kannst du …“, „Haben Sie …“, Anhängsel wie „…, oder“). Imperative („Schicken Sie mir …“) und Bedingungssätze („Sollte das nicht klappen, …“) bleiben Aussagen. „Kann ich …“/„Machen wir …“ gelten nur als Frage, wenn die Spracherkennung keinen Punkt gesetzt hat. Es werden nur Fragezeichen ergänzt, nie entfernt.
 - **Start-Timeout:** Kommt 3 s lang kein Audio-Buffer an, zeigt das Overlay einen Fehler statt ewig „Moment…“.

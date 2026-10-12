@@ -33,6 +33,13 @@ import Testing
     #expect(result.hits[entries[1].id] == 1)
 }
 
+@Test func dictionaryWordFixesNearMisses() {
+    let entries = [GlossaryEntry(wrong: "", correct: "Paperless")]
+    let result = Glossary.apply(entries, to: "Papeless und Paperess, Paperless und Paperlessness, Paper")
+    #expect(result.text == "Paperless und Paperless, Paperless und Paperlessness, Paper")
+    #expect(result.hits[entries[0].id] == 2)
+}
+
 @Test func glossaryStoreCountsHitsAndPersists() throws {
     let url = FileManager.default.temporaryDirectory.appending(path: "glossary-\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: url) }
@@ -120,6 +127,45 @@ import Testing
     #expect(chunks.allSatisfy { $0.count <= 200 })
     #expect(chunks.joined(separator: " ") == text)
     #expect(Formatter.chunks("kurz", limit: 200) == ["kurz"])
+}
+
+// MARK: - Questions
+
+@Test func questionsAreMarkedFromSyntax() {
+    let questions = [
+        // Real transcripts: the last sentence came without punctuation.
+        ("Damals hat sich der Kontakt verlaufen. Ist das wieder relevant geworden", "Damals hat sich der Kontakt verlaufen. Ist das wieder relevant geworden?"),
+        ("Wie würdest du das pricen", "Wie würdest du das pricen?"),
+        // The transcriber's "." is overridden by clear question syntax.
+        ("Hallo Max, wie geht es dir. Bis bald.", "Hallo Max, wie geht es dir? Bis bald."),
+        ("Kannst du mir sagen, wie spät es ist.", "Kannst du mir sagen, wie spät es ist?"),
+        ("Haben Sie schon Gelegenheit gehabt.", "Haben Sie schon Gelegenheit gehabt?"),
+        ("Gibt es dazu schon Neuigkeiten.", "Gibt es dazu schon Neuigkeiten?"),
+        ("Welche Farbe hat das Auto.", "Welche Farbe hat das Auto?"),
+        ("Bis wann brauchst du das.", "Bis wann brauchst du das?"),
+        ("Das passt so, oder.", "Das passt so, oder?"),
+        ("Und habt ihr morgen Zeit", "Und habt ihr morgen Zeit?"),
+        ("Kann ich dir helfen", "Kann ich dir helfen?"),
+    ]
+    for (input, expected) in questions { #expect(Questions.mark(input) == expected) }
+
+    let statements = [
+        "Soll nicht gut für die Gelenke sein.",
+        "Auch wenn ich auf Asphalt gehe oder so.",
+        "Kann ich verstehen.",
+        "Schicken Sie mir bitte die Unterlagen.",
+        "Schick die Mail an Max.",
+        "Übersetze die Mail auf Englisch.",
+        "Sollte das nicht klappen, melde ich mich.",
+        "Wer zuerst kommt, mahlt zuerst.",
+        "Wie gesagt, das Meeting ist morgen.",
+        "Was ich noch sagen wollte, das Budget steht.",
+        "Ich verstehe glaube ich nicht genau, was du meinst.",
+        "Hallo Sarah, das ist aktuell noch nicht möglich.",
+        "Ist das wieder relevant geworden?",
+        "Für das Wochenende brauchen wir:\n- Äpfel\n- Birnen",
+    ]
+    for statement in statements { #expect(Questions.mark(statement) == statement) }
 }
 
 // MARK: - Pipeline fallbacks

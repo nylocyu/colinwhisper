@@ -7,7 +7,7 @@ struct DictationResult: Codable, Identifiable, Equatable {
     let id: UUID
     let timestamp: Date
     let rawTranscript: String        // stage 2 — glossary learning diffs against this, never drop it
-    let correctedTranscript: String  // stage 3
+    let correctedTranscript: String  // stage 3 plus question marks (3b)
     let formattedText: String        // stage 4 (or fallback)
     let usedFallback: Bool
     let duration: TimeInterval       // length of the recorded audio
@@ -61,13 +61,13 @@ enum Pipeline {
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw PipelineError.noSpeech }
         log.debug("raw: \(raw, privacy: .private)")
 
-        let corrected: String
+        var corrected = raw
         do {
             corrected = try glossary.apply(to: raw)
         } catch {
             log.error("glossary failed, using raw transcript: \(error.localizedDescription)")
-            corrected = raw
         }
+        corrected = Questions.mark(corrected)
 
         var formatted = corrected
         var usedFallback = true

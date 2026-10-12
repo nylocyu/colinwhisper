@@ -46,7 +46,29 @@ enum Glossary {
             let changed = replace(spellingPattern(entry.correct), caseSensitive: false, with: entry.correct, in: &text)
             if changed > 0 { hits[entry.id, default: 0] += changed }
         }
+        // Words one letter off a long word-only entry: "Papeless", "Paperess" → "Paperless".
+        // Words that start with the entry are inflections or compounds ("Paperlessness") and stay.
+        for entry in entries where entry.wrong.trimmingCharacters(in: .whitespaces).isEmpty
+            && entry.correct.count >= 7 && !entry.correct.contains(" ") {
+            let target = entry.correct.lowercased()
+            let changed = replaceWords(in: &text) { word in
+                let lower = word.lowercased()
+                return !lower.hasPrefix(target) && levenshtein(lower, target) == 1 ? entry.correct : nil
+            }
+            if changed > 0 { hits[entry.id, default: 0] += changed }
+        }
         return (text, hits)
+    }
+
+    /// Replaces each whole word (inner hyphens included) for which `replacement` returns a value.
+    private static func replaceWords(in text: inout String, _ replacement: (String) -> String?) -> Int {
+        var changed = 0
+        text = text.replacing(/[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*/) { match in
+            guard let new = replacement(String(match.output)) else { return String(match.output) }
+            changed += 1
+            return new
+        }
+        return changed
     }
 
     /// Replaces matches of `pattern` on word boundaries; returns how many actually changed.
