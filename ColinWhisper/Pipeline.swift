@@ -11,12 +11,14 @@ struct DictationResult: Codable, Identifiable, Equatable {
     let formattedText: String        // stage 4 (or fallback)
     let usedFallback: Bool
     let duration: TimeInterval       // length of the recorded audio
+    var formattedBy: String? = nil   // `TextFormatting.name`; nil with the fallback
 }
 
 // MARK: - Stage protocols
 
 protocol Transcribing {
-    func transcribe(_ buffers: [AVAudioPCMBuffer], contextualStrings: [String]) async throws -> String
+    /// One string per recognized segment, in order. The pipeline joins them.
+    func transcribe(_ buffers: [AVAudioPCMBuffer], contextualStrings: [String]) async throws -> [String]
 }
 
 protocol GlossaryProcessing {
@@ -25,7 +27,9 @@ protocol GlossaryProcessing {
 }
 
 protocol TextFormatting: Sendable {
-    func format(_ text: String) async throws -> String
+    var name: String { get }
+    /// `terms`: glossary spellings the model has to keep exactly.
+    func format(_ text: String, terms: [String]) async throws -> String
 }
 
 // MARK: - Pipeline
@@ -44,17 +48,18 @@ enum PipelineError: LocalizedError {
 
 enum Pipeline {
     /// Stages 2–4. Throws only when transcription fails; later stages fall back instead.
-    /// `formatter == nil` means the LLM is unavailable: permanent fallback mode.
+    /// `formatters` are tried in order (Claude with the user's key, then the local model);
+    /// when none is left, the stage-3 text is inserted.
     static func run(
         buffers: [AVAudioPCMBuffer],
         duration: TimeInterval,
         transcriber: any Transcribing,
         glossary: any GlossaryProcessing,
-        formatter: (any TextFormatting)?
+        formatters: [any TextFormatting]
     ) async throws -> DictationResult {
         let raw: String
         do {
-            raw = try await transcriber.transcribe(buffers, contextualStrings: glossary.contextualStrings)
+            raw = join(try await transcriber.transcribe(buffers, contextualStrings: glossary.contextualStrings))
         } catch {
             throw PipelineError.transcription(error.localizedDescription)
         }
@@ -70,20 +75,38 @@ enum Pipeline {
         corrected = Questions.mark(corrected)
 
         var formatted = corrected
-        var usedFallback = true
-        if let formatter {
+        var formattedBy: String?
+        for formatter in formatters {
             do {
-                formatted = try await formatter.format(corrected)
-                usedFallback = false
+                formatted = try await formatter.format(corrected, terms: glossary.contextualStrings)
+                formattedBy = formatter.name
+                break
             } catch {
-                // Guardrail violations, timeouts, implausible output: all normal fallback cases.
-                log.notice("formatter fallback: \(String(describing: error))")
+                // Offline, guardrails, timeouts, implausible output: all normal fallback cases.
+                log.notice("\(formatter.name) failed: \(String(describing: error))")
             }
         }
 
         return DictationResult(
             id: UUID(), timestamp: Date(), rawTranscript: raw, correctedTranscript: corrected,
-            formattedText: formatted, usedFallback: usedFallback, duration: duration)
+            formattedText: formatted, usedFallback: formattedBy == nil, duration: duration, formattedBy: formattedBy)
+    }
+
+    /// Stage 2b. SpeechTranscriber delivers one result per segment, and a segment doesn't
+    /// always start with a space: plain concatenation glued "Whisper" + "Fällt mir".
+    static func join(_ segments: [String]) -> String {
+        tidy(segments.joined(separator: " "))
+    }
+
+    /// One space between words, none before punctuation, and one after a sentence end that
+    /// runs into the next sentence ("aufnehme.Ich"). Two letters before the dot keep
+    /// abbreviations like "z.B." and "U.S.A." intact.
+    static func tidy(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "[ \\t]+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: " ([.,;:?!])", with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: "(?<=\\p{L}{2}[.?!])(?=\\p{Lu})", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

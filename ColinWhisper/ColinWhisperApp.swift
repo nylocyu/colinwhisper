@@ -29,10 +29,15 @@ private struct MenuContent: View {
     let controller: DictationController
     let updater: SPUUpdater
     @AppStorage(DefaultsKey.triggerKey) private var trigger = TriggerKey.rightCommand
+    @AppStorage(DefaultsKey.formatter) private var formatterChoice = FormatterChoice.claude
 
     var body: some View {
         Text(controller.statusText(trigger: trigger))
-        if let reason = controller.formatterUnavailableReason {
+        let claude = formatterChoice == .claude && controller.claudeKey != nil
+        if controller.claudeKey != nil {
+            Text(claude ? "Formatierung: Claude Haiku 5.5" : "Formatierung: lokales Modell")
+        }
+        if !claude, let reason = controller.formatterUnavailableReason {
             Text("Nur unformatiert: \(reason)")
         }
         ForEach(controller.permissions.missing) { permission in
@@ -51,6 +56,9 @@ private struct MenuContent: View {
         Button("Glossar verwalten…", action: controller.showGlossary)
         Button("Einstellungen…", action: controller.showSettings)
             .keyboardShortcut(",")
+        #if DEBUG
+        Button("Pipeline testen…", action: controller.showPipelineTest)
+        #endif
         Button("Nach Updates suchen…", action: updater.checkForUpdates)
 
         Divider()

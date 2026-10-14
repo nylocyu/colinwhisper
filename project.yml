@@ -37,7 +37,7 @@ targets:
     info:
       path: ColinWhisper/Info.plist
       properties:
-        CFBundleDisplayName: ColinWhisper
+        CFBundleDisplayName: $(PRODUCT_NAME)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(MARKETING_VERSION)
         LSUIElement: true
@@ -50,6 +50,11 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.colinportisch.ColinWhisper
+      configs:
+        # Tell the test build apart from the installed release. Same bundle ID on purpose,
+        # so both keep sharing one set of permissions.
+        Debug:
+          PRODUCT_NAME: ColinWhisper Dev
   ColinWhisperTests:
     type: bundle.unit-test
     platform: macOS
@@ -62,6 +67,8 @@ targets:
       - ColinWhisper/Formatter.swift
       - ColinWhisper/Questions.swift
       - ColinWhisper/Stats.swift
+      - ColinWhisper/Fixture.swift
+      - ColinWhisper/Claude.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

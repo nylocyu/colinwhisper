@@ -14,6 +14,26 @@ enum DefaultsKey {
     static let autoOpenCorrection = "autoOpenCorrection"
     static let historyLimit = "historyLimit"
     static let triggerKey = "triggerKey"
+    static let formatter = "formatter"
+}
+
+/// Which model formats, chosen in the settings. Claude needs a stored key; without one the
+/// local model formats either way.
+enum FormatterChoice: String, CaseIterable, Identifiable {
+    case claude, local
+
+    var id: Self { self }
+
+    var name: String {
+        switch self {
+        case .claude: "Claude Haiku 5.5 (eigener Key)"
+        case .local: "Lokales Modell auf dem Mac"
+        }
+    }
+
+    static var current: FormatterChoice {
+        UserDefaults.standard.string(forKey: DefaultsKey.formatter).flatMap(Self.init) ?? .claude
+    }
 }
 
 struct Permissions: Equatable {
@@ -55,6 +75,11 @@ struct Permissions: Equatable {
     }
 }
 
+private struct TypedTranscript: Transcribing {
+    let segments: [String]
+    func transcribe(_ buffers: [AVAudioPCMBuffer], contextualStrings: [String]) async throws -> [String] { segments }
+}
+
 @Observable
 final class DictationController {
     private(set) var state: DictationState = .idle {
@@ -62,6 +87,8 @@ final class DictationController {
     }
     private(set) var permissions = Permissions.current()
     private(set) var formatterUnavailableReason: String?
+    /// The user's Anthropic key (BYOK). With it, Claude formats first; the local model is the fallback.
+    private(set) var claudeKey: String? = APIKeyStore.load()
     private(set) var history: [DictationResult] = DictationController.loadHistory()
     var lastResult: DictationResult? { history.first }
 
@@ -134,7 +161,8 @@ final class DictationController {
         clearTask?.cancel()
         pressedAt = Date()
         state = .starting
-        formatter.prewarm()
+        formatter.prewarm(terms: glossary.contextualStrings)
+        if usesClaude, let claudeKey { Task { try? await ClaudeFormatter.check(key: claudeKey) } }
         audio.start(
             format: transcriber.audioFormat,
             onFirstBuffer: { [weak self] in
@@ -200,12 +228,12 @@ final class DictationController {
     // MARK: - Pipeline
 
     private func process(_ recording: AudioCapture.Recording) async {
-        let formatter = formatter.unavailableReason == nil ? self.formatter : nil
+        let formatters = formatters(claude: usesClaude)
         let result: DictationResult
         do {
             result = try await Pipeline.run(
                 buffers: recording.buffers, duration: recording.duration,
-                transcriber: transcriber, glossary: glossary, formatter: formatter)
+                transcriber: transcriber, glossary: glossary, formatters: formatters)
         } catch {
             return show(.error(error.localizedDescription))
         }
@@ -220,7 +248,7 @@ final class DictationController {
             return show(.error("Einfügen nicht erlaubt (Bedienungshilfen) – Text liegt in der Zwischenablage"))
         }
         await TextInserter.paste(result.formattedText)
-        if result.usedFallback, formatter != nil { show(.notice("unformatiert")) }
+        if result.usedFallback, !formatters.isEmpty { show(.notice("unformatiert")) }
         if UserDefaults.standard.bool(forKey: DefaultsKey.autoOpenCorrection) { showCorrection() }
     }
 
@@ -269,6 +297,46 @@ final class DictationController {
 
     func showSettings() {
         windows.show("settings", title: "Einstellungen") { SettingsView(controller: self) }
+    }
+
+    func showPipelineTest() {
+        windows.show("pipelineTest", title: "Pipeline testen") { PipelineTestView(controller: self) }
+    }
+
+    /// Debug window: runs `text` through stages 2b–4 as if the transcriber had returned it,
+    /// one segment per line. No paste, no history. Returns the post-processing time.
+    func testPipeline(_ text: String, claude: Bool) async throws -> (result: DictationResult, seconds: Double) {
+        formatter.prewarm(terms: glossary.contextualStrings)
+        if claude, let claudeKey { try? await ClaudeFormatter.check(key: claudeKey) }
+        try await Task.sleep(for: .seconds(1))  // in real use the model loads while you speak
+        let start = ContinuousClock.now
+        let result = try await Pipeline.run(
+            buffers: [], duration: 0, transcriber: TypedTranscript(segments: text.components(separatedBy: "\n")),
+            glossary: glossary, formatters: formatters(claude: claude))
+        return (result, (ContinuousClock.now - start) / .seconds(1))
+    }
+
+    private var usesClaude: Bool { claudeKey != nil && FormatterChoice.current == .claude }
+
+    /// Claude first when the user has a key, then the local model when Apple Intelligence is on.
+    private func formatters(claude: Bool) -> [any TextFormatting] {
+        var list: [any TextFormatting] = []
+        if claude, let claudeKey { list.append(ClaudeFormatter(apiKey: claudeKey)) }
+        if formatter.unavailableReason == nil { list.append(formatter) }
+        return list
+    }
+
+    /// Stores the key in the keychain (nil removes it). False when the keychain refused.
+    @discardableResult
+    func setClaudeKey(_ key: String?) -> Bool {
+        guard let key else {
+            APIKeyStore.delete()
+            claudeKey = nil
+            return true
+        }
+        guard APIKeyStore.save(key) else { return false }
+        claudeKey = key
+        return true
     }
 
     // MARK: - History (local only, capped, audio never stored)

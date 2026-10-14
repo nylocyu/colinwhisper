@@ -152,7 +152,7 @@ struct CorrectionView: View {
 
     private func learn(from result: DictationResult) {
         // Diff against the raw transcript, not the LLM output.
-        let candidates = Glossary.candidates(raw: result.rawTranscript, corrected: text, existing: glossary.entries)
+        let candidates = Glossary.candidates(raw: result.rawTranscript, corrected: text, existing: glossary.allEntries)
         let outcome = memory.record(candidates, from: result.id)
         outcome.promoted.forEach(glossary.add)
         learned = outcome
@@ -173,6 +173,80 @@ struct CorrectionView: View {
                       systemImage: "clock")
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+// MARK: - Pipeline test (menu entry in debug builds)
+
+struct PipelineTestView: View {
+    let controller: DictationController
+    @State private var input = PipelineTestView.testCase
+    @State private var output: (result: DictationResult, seconds: Double)?
+    @State private var error: String?
+    @State private var running = false
+    @State private var useClaude = FormatterChoice.current == .claude
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Eingabe – jede Zeile ist ein Segment der Spracherkennung").font(.headline)
+                TextEditor(text: $input)
+                    .font(.body)
+                    .frame(minHeight: 110)
+                HStack {
+                    Button("Testfall laden") { input = Self.testCase }
+                    Toggle("Claude verwenden", isOn: $useClaude)
+                        .disabled(controller.claudeKey == nil)
+                        .help(controller.claudeKey == nil ? "Erst in den Einstellungen einen API-Key eintragen" : "Aus: nur das Modell auf dem Mac")
+                    Spacer()
+                    if running { ProgressView().controlSize(.small) }
+                    Button("Durch die Pipeline schicken") { Task { await run() } }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(running || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                if let error { Text(error).foregroundStyle(.red) }
+                if let output {
+                    Divider()
+                    section("Rohtext (bereinigt)", output.result.rawTranscript)
+                    section("Nach Glossar und Fragezeichen", output.result.correctedTranscript)
+                    section(output.result.usedFallback ? "Ergebnis – Fallback, unformatiert" : "Ergebnis", output.result.formattedText)
+                    Text("Nachbearbeitung: \(output.seconds, format: .number.precision(.fractionLength(2)).locale(german)) s · \(formattedBy(output.result))")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+        }
+        .frame(minWidth: 640, minHeight: 560)
+    }
+
+    /// The tester's dictation, one segment per line.
+    private static let testCase = Fixture.testerFeedbackSegments.joined(separator: "\n")
+
+    private func section(_ title: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(text)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func formattedBy(_ result: DictationResult) -> String {
+        guard let name = result.formattedBy else { return "Fallback" }
+        guard name == Formatter.localName else { return name }
+        return name + (Formatter.wantsStructure(result.correctedTranscript) ? ", Struktur" : ", Freitext")
+    }
+
+    private func run() async {
+        running = true
+        defer { running = false }
+        do {
+            output = try await controller.testPipeline(input, claude: useClaude && controller.claudeKey != nil)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 }
@@ -405,8 +479,12 @@ struct SettingsView: View {
     @AppStorage(DefaultsKey.autoOpenCorrection) private var autoOpenCorrection = false
     @AppStorage(DefaultsKey.historyLimit) private var historyLimit = 20
     @AppStorage(DefaultsKey.triggerKey) private var trigger = TriggerKey.rightCommand
+    @AppStorage(DefaultsKey.formatter) private var formatterChoice = FormatterChoice.claude
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
+    @State private var keyInput = ""
+    @State private var keyMessage: (text: String, failed: Bool)?
+    @State private var checkingKey = false
 
     var body: some View {
         Form {
@@ -430,6 +508,34 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            Section("Formatierung") {
+                Picker("Modell", selection: $formatterChoice) {
+                    ForEach(FormatterChoice.allCases) { choice in Text(choice.name) }
+                }
+                if formatterChoice == .claude {
+                    if controller.claudeKey == nil {
+                        SecureField("Anthropic API-Key", text: $keyInput)
+                        Button(checkingKey ? "Wird geprüft…" : "Prüfen und speichern") { Task { await saveKey() } }
+                            .disabled(checkingKey || keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    } else {
+                        LabeledContent("API-Key", value: "im Schlüsselbund")
+                        Button("Key entfernen", role: .destructive) {
+                            controller.setClaudeKey(nil)
+                            keyMessage = nil
+                        }
+                    }
+                    if let keyMessage {
+                        Text(keyMessage.text).font(.caption).foregroundStyle(keyMessage.failed ? .red : .secondary)
+                    }
+                    Text("Claude Haiku 5.5 formatiert mit deinem API-Key. Dafür geht der Diktattext an Anthropic, das Audio nie. Kosten: rund 0,03 Cent pro Diktat. Ohne Key, ohne Netz oder bei Fehlern formatiert das Modell auf dem Mac.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Apple Intelligence formatiert auf dem Mac, nichts verlässt das Gerät. Ein gespeicherter Key bleibt im Schlüsselbund.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section("Verlauf") {
                 Stepper("\(historyLimit) Diktate aufbewahren", value: $historyLimit, in: 1...200)
                     .onChange(of: historyLimit) { controller.trimHistory() }
@@ -441,6 +547,24 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 440)
         .fixedSize()
+    }
+
+    private func saveKey() async {
+        let key = keyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        checkingKey = true
+        defer { checkingKey = false }
+        do {
+            try await ClaudeFormatter.check(key: key)
+        } catch {
+            keyMessage = (error.localizedDescription, true)
+            return
+        }
+        guard controller.setClaudeKey(key) else {
+            keyMessage = ("Speichern im Schlüsselbund fehlgeschlagen", true)
+            return
+        }
+        keyInput = ""
+        keyMessage = ("Key funktioniert und liegt im Schlüsselbund.", false)
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

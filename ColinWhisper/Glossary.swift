@@ -27,6 +27,20 @@ struct GlossaryCandidate: Hashable {
 enum Glossary {
     // MARK: Application (stage 3)
 
+    /// Known misrecognitions → correct spelling, applied on top of the user's entries.
+    /// SpeechTranscriber ignores contextual strings, so names it doesn't know are only fixed here.
+    /// From tester transcripts and TTS tests; longer entries win, so "Colin Wis.per" beats "Wis.per".
+    static let builtIn: [GlossaryEntry] = [
+        GlossaryEntry(wrong: "Colin Wis.per", correct: "Colin Whisper"),
+        GlossaryEntry(wrong: "Colin Visper", correct: "Colin Whisper"),
+        GlossaryEntry(wrong: "Wis.per", correct: "Wispr Flow"),
+        GlossaryEntry(wrong: "US. Whisper", correct: "Wispr Flow"),
+        GlossaryEntry(wrong: "US Whisper", correct: "Wispr Flow"),
+        GlossaryEntry(wrong: "Whisper Flow", correct: "Wispr Flow"),
+        GlossaryEntry(wrong: "Whisperflow", correct: "Wispr Flow"),
+        GlossaryEntry(wrong: "API K", correct: "API-Key"),
+    ]
+
     /// Plain string replacement on word boundaries, longest entries first so multi-word
     /// entries aren't split up by shorter ones. Then every target spelling is enforced
     /// regardless of case, spaces and hyphens — that's all a word-only entry (empty
@@ -199,13 +213,16 @@ final class GlossaryStore: GlossaryProcessing {
         }
     }
 
-    /// Target spellings, used to bias the transcriber.
+    /// The user's entries plus the built-in known misrecognitions.
+    var allEntries: [GlossaryEntry] { entries + Glossary.builtIn }
+
+    /// Target spellings: transcriber context and formatter prompt.
     var contextualStrings: [String] {
-        Array(Set(entries.map(\.correct).filter { !$0.isEmpty })).sorted()
+        Array(Set(allEntries.map(\.correct).filter { !$0.isEmpty })).sorted()
     }
 
     func apply(to text: String) -> String {
-        let (result, hits) = Glossary.apply(entries, to: text)
+        let (result, hits) = Glossary.apply(allEntries, to: text)
         if !hits.isEmpty {
             var updated = entries
             for index in updated.indices { updated[index].hitCount += hits[updated[index].id] ?? 0 }

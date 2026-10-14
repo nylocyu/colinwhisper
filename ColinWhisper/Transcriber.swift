@@ -8,8 +8,9 @@ import Speech
 ///   (DictationTranscriber has `.punctuation`, but in a side-by-side test it dropped
 ///   words in German, so SpeechTranscriber is used.)
 /// - contextualStrings live on `AnalysisContext` and are set via `analyzer.setContext`.
-///   They are passed as specified, but in tests neither transcriber changed its output
-///   because of them — the glossary (stage 3) does the real work.
+///   Apple documents them for DictationTranscriber only; SpeechTranscriber ignores them
+///   (no effect in tests either). They stay in case that changes — the glossary (stage 3)
+///   and the formatter prompt do the real work.
 @Observable
 final class Transcriber: Transcribing {
     enum Status: Equatable {
@@ -70,14 +71,14 @@ final class Transcriber: Transcribing {
         }
     }
 
-    func transcribe(_ buffers: [AVAudioPCMBuffer], contextualStrings: [String]) async throws -> String {
+    func transcribe(_ buffers: [AVAudioPCMBuffer], contextualStrings: [String]) async throws -> [String] {
         let module = makeModule()
         // Grab the (Sendable) results sequence before the module is handed to the analyzer.
         let results = module.results
         let collector = Task {
-            var text = ""
-            for try await result in results { text += String(result.text.characters) }
-            return text
+            var segments: [String] = []
+            for try await result in results { segments.append(String(result.text.characters)) }
+            return segments
         }
 
         let analyzer = SpeechAnalyzer(modules: [module], options: Self.options)
@@ -106,7 +107,7 @@ final class Transcriber: Transcribing {
             collector.cancel()
             throw error
         }
-        return try await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try await collector.value
     }
 
     private static func silence(seconds: Double, format: AVAudioFormat) -> AVAudioPCMBuffer {
