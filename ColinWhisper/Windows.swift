@@ -480,6 +480,7 @@ struct SettingsView: View {
     @AppStorage(DefaultsKey.historyLimit) private var historyLimit = 20
     @AppStorage(DefaultsKey.triggerKey) private var trigger = TriggerKey.rightCommand
     @AppStorage(DefaultsKey.formatter) private var formatterChoice = FormatterChoice.claude
+    @AppStorage(ClaudeFormatter.costKey) private var claudeCost = 0.0
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
     @State private var keyInput = ""
@@ -523,6 +524,15 @@ struct SettingsView: View {
                             controller.setClaudeKey(nil)
                             keyMessage = nil
                         }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Du hast Colin \(claudeCost, format: .number.precision(.fractionLength(2)).locale(german)) Cent verursacht.")
+                                .font(.headline)
+                            Text("Das sind \(workTime) seiner Arbeitszeit.")
+                            Text("Bei \(ClaudeFormatter.euroPerHour, format: .number.locale(german)) € pro Stunde")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .monospacedDigit()
                     }
                     if let keyMessage {
                         Text(keyMessage.text).font(.caption).foregroundStyle(keyMessage.failed ? .red : .secondary)
@@ -547,6 +557,14 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 440)
         .fixedSize()
+    }
+
+    /// "0,1 Sekunden", "4,2 Minuten", "1,3 Stunden" – one unit, whichever fits.
+    private var workTime: String {
+        let seconds = claudeCost / 100 / ClaudeFormatter.euroPerHour * 3600
+        return Duration.milliseconds(Int64(seconds * 1000)).formatted(
+            .units(allowed: [.hours, .minutes, .seconds], width: .wide, maximumUnitCount: 1, fractionalPart: .show(length: 1))
+            .locale(german))
     }
 
     private func saveKey() async {

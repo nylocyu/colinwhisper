@@ -33,11 +33,23 @@ struct ClaudeFormatter: TextFormatting {
     static let timeout: Double = 8
     private static let api = URL(string: "https://api.anthropic.com/v1/")!
 
+    /// Haiku 5.5 in $ per million tokens (prompts up to 100K); cache writes are the 5-minute kind.
+    private static let price = (input: 0.10, cacheWrite: 0.125, cacheRead: 0.01, output: 0.50)
+    // ponytail: fixed exchange rate, update by hand if the dollar moves a lot
+    static let euroPerDollar = 0.86
+    /// Colin's working time in the settings is priced at this.
+    static let euroPerHour = 19.0
+    /// Euro cents spent on Claude so far, in the defaults; the statistics reset leaves it.
+    static let costKey = "claudeCost"
+
     func format(_ text: String, terms: [String]) async throws -> String {
         var request = URLRequest(url: Self.api.appending(path: "messages"))
         request.httpMethod = "POST"
         request.httpBody = try JSONSerialization.data(withJSONObject: Self.body(for: text, terms: terms))
         let data = try await withTimeout(seconds: Self.timeout) { [apiKey] in try await Self.send(request, key: apiKey) }
+        // Before the checks: an answer that fails them is billed all the same.
+        let defaults = UserDefaults.standard
+        defaults.set(defaults.double(forKey: Self.costKey) + Self.cents(data), forKey: Self.costKey)
         return try Formatter.verified(Self.parse(data), for: text)
     }
 
@@ -98,6 +110,18 @@ struct ClaudeFormatter: TextFormatting {
         return try FormattedDictation(GeneratedContent(json: json))
     }
 
+    /// What one response cost, in euro cents; 0 without a usage block.
+    static func cents(_ data: Data) -> Double {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let usage = try? decoder.decode(Billed.self, from: data).usage else { return 0 }
+        let dollars = (Double(usage.inputTokens) * price.input
+            + Double(usage.cacheCreationInputTokens ?? 0) * price.cacheWrite
+            + Double(usage.cacheReadInputTokens ?? 0) * price.cacheRead
+            + Double(usage.outputTokens) * price.output) / 1_000_000
+        return dollars * euroPerDollar * 100
+    }
+
     private struct Response: Decodable {
         struct Block: Decodable {
             let type: String
@@ -105,6 +129,16 @@ struct ClaudeFormatter: TextFormatting {
         }
         let content: [Block]
         let stopReason: String?
+    }
+
+    private struct Billed: Decodable {
+        struct Usage: Decodable {
+            let inputTokens: Int
+            let outputTokens: Int
+            let cacheCreationInputTokens: Int?
+            let cacheReadInputTokens: Int?
+        }
+        let usage: Usage
     }
 
     private struct ErrorResponse: Decodable {

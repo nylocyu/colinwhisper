@@ -287,6 +287,17 @@ private let fixtureJoined = "guten Morgen Colin, wie besprochen hier mein kurzes
     #expect(throws: ClaudeError.self) { try ClaudeFormatter.parse(response("max_tokens")) }
 }
 
+@Test func claudeCostComesFromTheUsageBlock() throws {
+    let million = 1_000_000
+    let usage: [String: Any] = [
+        "usage": ["input_tokens": million, "output_tokens": million,
+                  "cache_creation_input_tokens": million, "cache_read_input_tokens": million],
+    ]
+    // 0,10 + 0,50 + 0,125 + 0,01 = 0,735 $ = 73,5 US-Cent, at 0,86 € per dollar 63,21 Euro-Cent.
+    #expect(abs(ClaudeFormatter.cents(try JSONSerialization.data(withJSONObject: usage)) - 63.21) < 0.001)
+    #expect(ClaudeFormatter.cents(Data("{}".utf8)) == 0)
+}
+
 // MARK: - Glossary
 
 @Test func glossaryRespectsWordBoundaries() {
